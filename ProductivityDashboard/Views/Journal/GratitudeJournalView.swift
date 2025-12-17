@@ -1,14 +1,15 @@
 import SwiftUI
-import PhotosUI
-import UIKit
+import UIKit  // Untuk haptic
 
 struct GratitudeJournalView: View {
     @State private var vm = GratitudeJournalViewModel()
-    @State private var text = ""
+    @State private var selectedDate = Date()
     @State private var mood: String?
+    @State private var gratefulFor = ""
+    @State private var makeGreat = ""
+    @State private var amazingThings = ""
     @State private var showConfetti = false
-    @State private var selectedPhoto: PhotosPickerItem?
-    @State private var photoData: Data?
+    @State private var showTimer = false  // Optional timer toggle
     
     private let moods = ["Grateful", "Happy", "Calm", "Loved", "Strong"]
     private let moodEmojis = ["🙏", "😊", "🧘‍♀️", "❤️", "💪"]
@@ -22,9 +23,10 @@ struct GratitudeJournalView: View {
                 ScrollView {
                     VStack(spacing: 32) {
                         headerSection
-                        journalTextEditor
-                        photoPickerSection
-                        moodSelectionSection
+                        moodSection
+                        textBoxSection(for: "I'm grateful for...", text: $gratefulFor)
+                        textBoxSection(for: "What would make today great?", text: $makeGreat)
+                        textBoxSection(for: "What are some amazing things that happened today?", text: $amazingThings)
                         saveButtonSection
                         Spacer(minLength: 50)
                     }
@@ -38,7 +40,8 @@ struct GratitudeJournalView: View {
             }
             .navigationTitle("Jurnal Syukur")
             .navigationBarTitleDisplayMode(.large)
-            .onAppear(perform: loadTodayEntry)
+            .onAppear { loadEntryForSelectedDate() }
+            .onChange(of: selectedDate) { loadEntryForSelectedDate() }
         }
     }
     
@@ -46,152 +49,119 @@ struct GratitudeJournalView: View {
     
     private var headerSection: some View {
         VStack(spacing: 8) {
-            Text("Apa yang membuatmu bersyukur hari ini?")
-                .font(.title2.bold())
-                .foregroundStyle(.white.opacity(0.9))
-                .multilineTextAlignment(.center)
+            DatePicker("Pilih Tanggal", selection: $selectedDate, displayedComponents: .date)
+                .datePickerStyle(.compact)
+                .colorScheme(.dark)  // Aesthetic dark mode
+                .padding(.horizontal)
             
-            Text(Date(), format: .dateTime.day().month(.wide).year())
-                .font(.headline)
+            Text("Take 5 minutes to reflect today")
+                .font(.headline.italic())
                 .foregroundStyle(.white.opacity(0.7))
         }
         .padding(.top, 20)
     }
     
-    private var journalTextEditor: some View {
-        TextEditor(text: $text)
+    private var moodSection: some View {
+        VStack(spacing: 12) {
+            Text("How is your mood for today?")
+                .font(.title3.bold())
+                .foregroundStyle(.white.opacity(0.9))
+            
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 80), spacing: 16)], spacing: 16) {
+                ForEach(moods.indices, id: \.self) { i in
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            mood = moods[i]
+                        }
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    } label: {
+                        VStack(spacing: 4) {
+                            Text(moodEmojis[i])
+                                .font(.system(size: mood == moods[i] ? 50 : 40))
+                            Text(moods[i])
+                                .font(.caption2.bold())
+                                .foregroundStyle(.white)
+                        }
+                        .padding(12)
+                        .background(mood == moods[i] ? .white.opacity(0.3) : .white.opacity(0.15))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(mood == moods[i] ? .white : .clear, lineWidth: 1.5)
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    private func textBoxSection(for prompt: String, text: Binding<String>) -> some View {
+        TextEditor(text: text)
             .scrollContentBackground(.hidden)
-            .background(.regularMaterial)
+            .background(.ultraThinMaterial)
             .cornerRadius(16)
-            .frame(minHeight: 250, maxHeight: 350)
+            .frame(height: 150)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(.white.opacity(0.2), lineWidth: 1)
             )
             .padding(.horizontal)
             .overlay(alignment: .topLeading) {
-                if text.isEmpty {
-                    Text("Tuliskan apa saja yang kamu syukuri hari ini...")
+                if text.wrappedValue.isEmpty {
+                    Text(prompt)
                         .foregroundStyle(.white.opacity(0.5))
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
                 }
             }
-            .accessibilityLabel("Entri jurnal syukur")
-    }
-    
-    private var photoPickerSection: some View {
-        PhotosPicker(selection: $selectedPhoto, matching: .images) {
-            Label("Tambah Foto (Opsional)", systemImage: "photo")
-                .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
-                .padding(12)
-                .background(.white.opacity(0.15))
-                .cornerRadius(12)
-        }
-        .padding(.horizontal)
-        .onChange(of: selectedPhoto) { _, new in
-            Task {
-                photoData = try? await new?.loadTransferable(type: Data.self)
-            }
-        }
-    }
-    
-    private var moodSelectionSection: some View {
-        VStack(spacing: 12) {
-            Text("Bagaimana perasaanmu hari ini?")
-                .font(.headline)
-                .foregroundStyle(.white.opacity(0.8))
-            
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 16)], spacing: 16) {
-                ForEach(moods.indices, id: \.self) { i in
-                    moodButton(for: i)
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-    
-    private func moodButton(for index: Int) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                mood = moods[index]
-            }
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        } label: {
-            VStack(spacing: 8) {
-                Text(moodEmojis[index])
-                    .font(.system(size: mood == moods[index] ? 60 : 48))
-                Text(moods[index])
-                    .font(.caption.bold())
-                    .foregroundStyle(.white)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(16)
-            .background(mood == moods[index] ? .white.opacity(0.3) : .white.opacity(0.15))
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(mood == moods[index] ? .white : .clear, lineWidth: 2)
-            )
-        }
-        .accessibilityLabel("Pilih mood \(moods[index])")
+            .accessibilityLabel(prompt)
     }
     
     private var saveButtonSection: some View {
         Button {
-            vm.addEntry(text: text, mood: mood, photoData: photoData)
-            triggerCelebration()
+            vm.addEntry(mood: mood, gratefulFor: gratefulFor, makeGreat: makeGreat, amazingThings: amazingThings, for: selectedDate)
+            showConfetti = true
+            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                withAnimation { showConfetti = false }
+            }
         } label: {
-            Text(vm.entryForToday() != nil ? "Update Entri Hari Ini" : "Simpan Entri Hari Ini")
+            Text(entryForSelectedDate != nil ? "Update Entri" : "Simpan Entri")
                 .font(.title3.bold())
                 .frame(maxWidth: .infinity)
                 .padding(18)
                 .background(
                     RoundedRectangle(cornerRadius: 20)
-                        .fill(
-                            isSaveEnabled
-                            ? LinearGradient(colors: [.teal, .blue], startPoint: .leading, endPoint: .trailing)
-                            : LinearGradient(colors: [.gray.opacity(0.7), .gray.opacity(0.5)], startPoint: .leading, endPoint: .trailing)
-                        )
-                        .shadow(radius: isSaveEnabled ? 8 : 0)
+                        .fill(LinearGradient(colors: [.teal, .blue], startPoint: .leading, endPoint: .trailing))
                 )
                 .foregroundStyle(.white)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(isSaveEnabled ? .clear : .white.opacity(0.3), lineWidth: 1)
-                )
-                .opacity(isSaveEnabled ? 1.0 : 0.7)  // Bonus: sedikit fade saat disabled
+                .shadow(radius: 8)
         }
         .padding(.horizontal, 32)
-        .disabled(!isSaveEnabled)
-        .accessibilityHint(!isSaveEnabled ? "Isi teks dulu untuk simpan" : "Simpan entri")
+        .disabled(gratefulFor.isEmpty && makeGreat.isEmpty && amazingThings.isEmpty)
+        .opacity(gratefulFor.isEmpty && makeGreat.isEmpty && amazingThings.isEmpty ? 0.6 : 1.0)
+        .accessibilityHint(gratefulFor.isEmpty && makeGreat.isEmpty && amazingThings.isEmpty ? "Isi setidaknya satu field" : "Simpan entri hari ini")
     }
     
     // MARK: - Helpers
     
-    private var isSaveEnabled: Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var entryForSelectedDate: GratitudeEntry? {
+        vm.entryForDate(selectedDate)
     }
     
-    private func loadTodayEntry() {
-        if let today = vm.entryForToday() {
-            text = today.text
-            mood = today.mood
-            photoData = today.photoData
-        }
-    }
-    
-    private func triggerCelebration() {
-        showConfetti = true
-        text = ""
-        mood = nil
-        photoData = nil
-        selectedPhoto = nil
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            withAnimation { showConfetti = false }
+    private func loadEntryForSelectedDate() {
+        if let entry = entryForSelectedDate {
+            mood = entry.mood
+            gratefulFor = entry.gratefulFor
+            makeGreat = entry.makeGreat
+            amazingThings = entry.amazingThings
+        } else {
+            mood = nil
+            gratefulFor = ""
+            makeGreat = ""
+            amazingThings = ""
         }
     }
 }

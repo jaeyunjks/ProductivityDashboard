@@ -2,51 +2,73 @@ import Foundation
 import Observation
 
 @Observable
-class GratitudeJournalViewModel {
+final class GratitudeJournalViewModel {
     private let storageKey = "gratitude_entries"
     
     var entries: [GratitudeEntry] = [] {
         didSet { saveToStorage() }
     }
     
-    init() { loadFromStorage() }
+    init() {
+        loadFromStorage()
+    }
     
-    func addEntry(text: String, mood: String?, photoData: Data?) {
-        let cleanedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanedText.isEmpty else { return }
+    // MARK: - Add / Update Entry
+    func addEntry(mood: String?,
+                  gratefulFor: String,
+                  makeGreat: String,
+                  amazingThings: String,
+                  for date: Date) {
         
-        let today = Calendar.current.startOfDay(for: Date())
-        if let index = entries.firstIndex(where: { Calendar.current.isDate($0.date, inSameDayAs: today) }) {
-            entries[index].text = cleanedText
+        let cleanedGrateful = gratefulFor.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedMake = makeGreat.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedAmazing = amazingThings.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Simpan kalau ada setidaknya satu field yang terisi
+        guard !cleanedGrateful.isEmpty || !cleanedMake.isEmpty || !cleanedAmazing.isEmpty else { return }
+        
+        let startOfDay = Calendar.current.startOfDay(for: date)
+        
+        if let index = entries.firstIndex(where: { Calendar.current.isDate($0.date, inSameDayAs: startOfDay) }) {
+            // Update existing entry
             entries[index].mood = mood
-            entries[index].photoData = photoData
+            entries[index].gratefulFor = cleanedGrateful
+            entries[index].makeGreat = cleanedMake
+            entries[index].amazingThings = cleanedAmazing
         } else {
-            let new = GratitudeEntry(date: Date(), text: cleanedText, mood: mood, photoData: photoData)
-            entries.insert(new, at: 0)
+            // Create new entry
+            let newEntry = GratitudeEntry(
+                date: startOfDay,
+                mood: mood,
+                gratefulFor: cleanedGrateful,
+                makeGreat: cleanedMake,
+                amazingThings: cleanedAmazing
+            )
+            entries.insert(newEntry, at: 0)
         }
     }
     
-    func entryForToday() -> GratitudeEntry? {
-        let today = Calendar.current.startOfDay(for: Date())
-        return entries.first { Calendar.current.isDate($0.date, inSameDayAs: today) }
+    // MARK: - Computed Properties (untuk akses cepat di View)
+    
+    /// Entry untuk hari ini (tanpa perlu panggil function)
+    var entryForToday: GratitudeEntry? {
+        entryForDate(Date())
     }
     
-    // New: Filter for search
-    func filteredEntries(searchText: String, moodFilter: String?) -> [GratitudeEntry] {
-        entries.filter { entry in
-            (searchText.isEmpty || entry.text.lowercased().contains(searchText.lowercased())) &&
-            (moodFilter == nil || entry.mood == moodFilter)
-        }
+    /// Entry untuk tanggal tertentu
+    func entryForDate(_ date: Date) -> GratitudeEntry? {
+        let startOfDay = Calendar.current.startOfDay(for: date)
+        return entries.first { Calendar.current.isDate($0.date, inSameDayAs: startOfDay) }
     }
     
-    // New: Stats calculation
-    func moodDistribution() -> [String: Int] {
-        entries.reduce(into: [:]) { $0[$1.mood ?? "Unknown", default: 0] += 1 }
-    }
-    
-    func streakDays() -> Int {
+    /// Current streak (hari berturut-turut ada entry)
+    var streakDays: Int {
         guard !entries.isEmpty else { return 0 }
-        let sortedDates = entries.sorted { $0.date > $1.date }.map { Calendar.current.startOfDay(for: $0.date) }
+        
+        let sortedDates = entries
+            .sorted { $0.date > $1.date }
+            .map { Calendar.current.startOfDay(for: $0.date) }
+        
         var streak = 1
         for i in 1..<sortedDates.count {
             if Calendar.current.date(byAdding: .day, value: -1, to: sortedDates[i-1]) == sortedDates[i] {
@@ -58,9 +80,19 @@ class GratitudeJournalViewModel {
         return streak
     }
     
+    /// Distribusi mood (untuk chart)
+    var moodDistribution: [String: Int] {
+        entries.reduce(into: [:]) { result, entry in
+            let mood = entry.mood ?? "Unknown"
+            result[mood, default: 0] += 1
+        }
+    }
+    
+    // MARK: - Persistence (UserDefaults)
+    
     private func saveToStorage() {
-        if let data = try? JSONEncoder().encode(entries) {
-            UserDefaults.standard.set(data, forKey: storageKey)
+        if let encoded = try? JSONEncoder().encode(entries) {
+            UserDefaults.standard.set(encoded, forKey: storageKey)
         }
     }
     
@@ -68,6 +100,7 @@ class GratitudeJournalViewModel {
         guard let data = UserDefaults.standard.data(forKey: storageKey),
               let decoded = try? JSONDecoder().decode([GratitudeEntry].self, from: data)
         else { return }
+        
         entries = decoded
     }
 }

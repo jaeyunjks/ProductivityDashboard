@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var selectedMood = ""
-    @State private var journalVM = GratitudeJournalViewModel()  // Untuk calendar overview
+    @State private var journalVM = GratitudeJournalViewModel()  // Tetap @State karena @Observable
     
     private let moods = [
         ("brain.head.profile", "Focused", "Clear mind, ready to work"),
@@ -37,12 +37,12 @@ struct ContentView: View {
                     }
                     .padding(.horizontal, 20)
                     
-                    // Calendar Overview (Today's Entry)
-                    if let todayEntry = journalVM.entryForToday() {
+                    // Calendar Overview (Today's Entry) – sekarang tanpa ()
+                    if let todayEntry = journalVM.entryForToday {
                         VStack(alignment: .leading) {
                             Text("Entry Hari Ini")
                                 .font(.headline)
-                            Text(todayEntry.text.prefix(100) + "...")
+                            Text(todayEntry.text.prefix(100) + (todayEntry.text.count > 100 ? "..." : ""))
                                 .font(.subheadline)
                                 .foregroundColor(.textDark.opacity(0.7))
                         }
@@ -61,7 +61,10 @@ struct ContentView: View {
                             FeatureRow(icon: "pencil.and.list.clipboard", title: "Gratitude Journal", subtitle: "Write today's entry")
                         }
                         
-                        NavigationLink(destination: MoodStatisticsView(viewModel: journalVM)) {
+                        // Pass journalVM dengan benar ke MoodStatisticsView
+                        NavigationLink {
+                            MoodStatisticsView(viewModel: journalVM)
+                        } label: {
                             FeatureRow(icon: "chart.bar.fill", title: "Statistics", subtitle: "See your patterns")
                         }
                     }
@@ -72,6 +75,12 @@ struct ContentView: View {
             }
             .background(Color.teal1.ignoresSafeArea())
             .navigationBarHidden(true)
+            // Share ViewModel ke semua child view
+            .environment(journalVM)
         }
     }
+}
+
+#Preview {
+    ContentView()
 }
